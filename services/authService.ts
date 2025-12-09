@@ -2,33 +2,31 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from './api';
 
 // ============= INTERFACES =============
-interface LoginCredentials {
-  email_or_username: string; // Email veya username ile giriş
+export interface LoginCredentials {
+  email: string;
   password: string;
 }
 
-interface RegisterData {
-  username: string;
+export interface RegisterData {
   email: string;
+  username: string;
+  full_name: string;
+  role: string;  // ✅ user_type yerine role
   password: string;
   password_confirm: string;
-  full_name: string;
-  role: 'individual' | 'support_required_individual' | 'responsible_person';
 }
 
-interface User {
+export interface User {
   id: number;
-  username: string;
   email: string;
+  username: string;
   full_name: string;
-  role: 'individual' | 'support_required_individual' | 'responsible_person';
-  profile_picture?: string;
+  role: string;
+  profile_picture: string | null;
   date_joined: string;
-  last_login: string;
-  is_active: boolean;
 }
 
-interface AuthResponse {
+export interface AuthResponse {
   message: string;
   user: User;
   tokens: {
@@ -39,118 +37,137 @@ interface AuthResponse {
 
 // ============= AUTH SERVICE =============
 class AuthService {
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+  // Token kaydet
+  async saveTokens(access: string, refresh: string): Promise<void> {
     try {
-      console.log('🔐 Login attempt:', credentials.email_or_username);
-      const response = await api.post<AuthResponse>('/users/login/', credentials);
-      console.log('✅ Login success:', response.data.user.username);
-      
-      // Token'ları kaydet
-      await AsyncStorage.setItem('access_token', response.data.tokens.access);
-      await AsyncStorage.setItem('refresh_token', response.data.tokens.refresh);
-      
-      // Kullanıcı bilgilerini kaydet
-      await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Login error:', error.response?.data || error.message);
-      const errorMessage = 
-        error.response?.data?.non_field_errors?.[0] || 
-        error.response?.data?.error || 
-        'E-posta/kullanıcı adı veya şifre hatalı';
-      throw new Error(errorMessage);
-    }
-  }
-
-  async register(data: RegisterData): Promise<AuthResponse> {
-    try {
-      console.log('📝 Register attempt:', data.username);
-      const response = await api.post<AuthResponse>('/users/register/', data);
-      console.log('✅ Register success:', response.data.user.username);
-      
-      // Token'ları kaydet
-      await AsyncStorage.setItem('access_token', response.data.tokens.access);
-      await AsyncStorage.setItem('refresh_token', response.data.tokens.refresh);
-      
-      // Kullanıcı bilgilerini kaydet
-      await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Register error:', error.response?.data || error.message);
-      
-      // Hata mesajlarını çıkar
-      if (error.response?.data?.username) {
-        throw new Error(error.response.data.username[0]);
-      }
-      if (error.response?.data?.email) {
-        throw new Error(error.response.data.email[0]);
-      }
-      if (error.response?.data?.password) {
-        throw new Error(error.response.data.password[0]);
-      }
-      
-      throw new Error('Kayıt başarısız. Lütfen bilgilerinizi kontrol edin.');
-    }
-  }
-
-  async logout(): Promise<void> {
-    try {
-      console.log('👋 Logout attempt');
-      const refreshToken = await AsyncStorage.getItem('refresh_token');
-      
-      if (refreshToken) {
-        await api.post('/users/logout/', { refresh: refreshToken });
-      }
-      console.log('✅ Logout success');
+      await AsyncStorage.setItem('access_token', access);
+      await AsyncStorage.setItem('refresh_token', refresh);
+      console.log('✅ Token kaydedildi');
     } catch (error) {
-      console.error('❌ Logout error:', error);
-    } finally {
-      // Token'ları temizle
-      await AsyncStorage.removeItem('access_token');
-      await AsyncStorage.removeItem('refresh_token');
-      await AsyncStorage.removeItem('user');
+      console.error('❌ Token kaydetme hatası:', error);
+      throw error;
     }
   }
 
+  // User kaydet
+  async saveUser(user: User): Promise<void> {
+    try {
+      await AsyncStorage.setItem('user', JSON.stringify(user));
+      console.log('✅ User kaydedildi:', user.email);
+    } catch (error) {
+      console.error('❌ User kaydetme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Access token al
+  async getAccessToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem('access_token');
+    } catch (error) {
+      console.error('❌ Token okuma hatası:', error);
+      return null;
+    }
+  }
+
+  // Refresh token al
+  async getRefreshToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem('refresh_token');
+    } catch (error) {
+      console.error('❌ Refresh token okuma hatası:', error);
+      return null;
+    }
+  }
+
+  // Current user al
   async getCurrentUser(): Promise<User | null> {
     try {
-      const userString = await AsyncStorage.getItem('user');
-      if (userString) {
-        const user = JSON.parse(userString);
-        console.log('👤 Current user:', user.username);
-        return user;
-      }
-      return null;
+      const userJson = await AsyncStorage.getItem('user');
+      return userJson ? JSON.parse(userJson) : null;
     } catch (error) {
-      console.error('❌ Get current user error:', error);
+      console.error('❌ User okuma hatası:', error);
       return null;
     }
   }
 
+  // Login
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    try {
+      console.log('🔐 Login isteği:', credentials.email);
+      
+      const response = await api.post<AuthResponse>('/users/login/', credentials);
+      
+      // Token ve user'ı kaydet
+      await this.saveTokens(response.data.tokens.access, response.data.tokens.refresh);
+      await this.saveUser(response.data.user);
+      
+      console.log('✅ Login başarılı');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Login hatası:', error.response?.data || error.message);
+      
+      if (error.response?.data?.detail) {
+        throw new Error(error.response.data.detail);
+      }
+      
+      throw new Error('Giriş başarısız');
+    }
+  }
+
+  // Register
+  async register(data: RegisterData): Promise<AuthResponse> {
+    try {
+      console.log('📤 Register isteği gönderiliyor:', data.email);
+      
+      const response = await api.post('/users/register/', data);
+      
+      if (response.data.tokens) {
+        await this.saveTokens(response.data.tokens.access, response.data.tokens.refresh);
+        await this.saveUser(response.data.user);
+      }
+      
+      console.log('✅ Register başarılı:', response.data.user.email);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Register hatası:', error.response?.data || error.message);
+      
+      // Hata mesajlarını parse et
+      const errorData = error.response?.data;
+      let message = 'Kayıt başarısız';
+      
+      if (errorData) {
+        if (errorData.email) {
+          message = Array.isArray(errorData.email) ? errorData.email[0] : errorData.email;
+        } else if (errorData.username) {
+          message = Array.isArray(errorData.username) ? errorData.username[0] : errorData.username;
+        } else if (errorData.password) {
+          message = Array.isArray(errorData.password) ? errorData.password[0] : errorData.password;
+        } else if (errorData.detail) {
+          message = errorData.detail;
+        }
+      }
+      
+      throw new Error(message);
+    }
+  }
+
+  // Logout
+  async logout(): Promise<void> {
+    try {
+      await AsyncStorage.multiRemove(['access_token', 'refresh_token', 'user']);
+      console.log('✅ Logout başarılı');
+    } catch (error) {
+      console.error('❌ Logout hatası:', error);
+      throw error;
+    }
+  }
+
+  // Login durumu kontrol
   async isAuthenticated(): Promise<boolean> {
-    const token = await AsyncStorage.getItem('access_token');
-    const isAuth = !!token;
-    console.log('🔑 Is authenticated:', isAuth);
-    return isAuth;
-  }
-
-  async getAccessToken(): Promise<string | null> {
-    return await AsyncStorage.getItem('access_token');
-  }
-
-  async getRefreshToken(): Promise<string | null> {
-    return await AsyncStorage.getItem('refresh_token');
-  }
-
-  async updateTokens(access: string, refresh: string): Promise<void> {
-    await AsyncStorage.setItem('access_token', access);
-    await AsyncStorage.setItem('refresh_token', refresh);
+    const token = await this.getAccessToken();
+    return !!token;
   }
 }
 
 export default new AuthService();
-
-// Export types for use in other files
-export type { LoginCredentials, RegisterData, User, AuthResponse };

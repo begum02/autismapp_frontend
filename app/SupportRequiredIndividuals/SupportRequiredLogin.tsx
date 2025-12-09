@@ -1,6 +1,3 @@
-import BottomQuarterCircle from "@/components/BottomQuarterCircle";
-import TopQuarterCircle from "@/components/TopQuarterCircle";
-import { router } from "expo-router";
 import React, { useState } from 'react';
 import {
   Alert,
@@ -15,6 +12,10 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import { router } from 'expo-router';
+import authService from '@/services/authService';  // ✅ authService kullan
+import BottomQuarterCircle from '@/components/BottomQuarterCircle';
+import TopQuarterCircle from '@/components/TopQuarterCircle';
 
 export default function SupportRequiredLogin() {
   const [email, setEmail] = useState('');
@@ -22,7 +23,6 @@ export default function SupportRequiredLogin() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    // Validations
     if (!email.trim() || !password) {
       Alert.alert('Hata', 'Lütfen e-posta ve şifrenizi girin.');
       return;
@@ -31,54 +31,36 @@ export default function SupportRequiredLogin() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/users/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password,
-        }),
+      console.log('🔐 Login başlatılıyor...');
+      
+      const response = await authService.login({
+        email: email.trim().toLowerCase(),
+        password: password,
       });
 
-      const data = await response.json();
+      console.log('✅ Login başarılı!');
+      console.log('👤 User:', response.user);
+      console.log('🔑 Role:', response.user.role);
 
-      if (response.ok) {
-        // Login başarılı
-        console.log('Login başarılı:', data.user);
-        console.log('Access Token:', data.tokens.access);
-        console.log('Refresh Token:', data.tokens.refresh);
-
-        // Kullanıcı tipini kontrol et (support_required olmalı)
-        if (data.user.user_type !== 'support_required') {
-          Alert.alert('Hata', 'Bu giriş sadece desteğe ihtiyacı olan bireyler içindir.');
-          setLoading(false);
-          return;
-        }
-
-        // TODO: AsyncStorage'a token ve user bilgisi kaydet
-        // await AsyncStorage.setItem('access_token', data.tokens.access);
-        // await AsyncStorage.setItem('refresh_token', data.tokens.refresh);
-        // await AsyncStorage.setItem('user', JSON.stringify(data.user));
-
-        // Ana sayfaya yönlendir (support required için uygun sayfa)
-        router.replace('/SupportRequiredIndividuals/SupportRequiredTasks'); // veya uygun sayfa
-      } else {
-        // Hata mesajlarını göster
-        let errorMessage = 'Giriş başarısız.';
-        if (data.detail) {
-          errorMessage = data.detail;
-        } else if (data.email) {
-          errorMessage = data.email[0];
-        } else if (data.password) {
-          errorMessage = data.password[0];
-        }
-        Alert.alert('Hata', errorMessage);
+      // ✅ Role kontrolü - Model'deki choice değeri ile karşılaştır
+      if (response.user.role !== 'support_required_individual') {
+        console.log('⚠️  Yanlış role:', response.user.role);
+        Alert.alert('Hata', 'Bu giriş sadece desteğe ihtiyacı olan bireyler içindir.');
+        await authService.logout();
+        return;
       }
-    } catch (error) {
-      console.error('Login hatası:', error);
-      Alert.alert('Hata', 'Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.');
+
+      // EmailsScreen'e yönlendir
+      Alert.alert('Başarılı', 'Giriş başarılı!', [
+        { 
+          text: 'Tamam', 
+          onPress: () => router.push('/SupportRequiredIndividuals/EmailsScreen')
+        }
+      ]);
+
+    } catch (error: any) {
+      console.error('❌ Login hatası:', error);
+      Alert.alert('Hata', error.message || 'Giriş başarısız');
     } finally {
       setLoading(false);
     }
@@ -154,7 +136,9 @@ export default function SupportRequiredLogin() {
             onPress={() => router.push('/SupportRequiredIndividuals/SupportRequiredRegister')}
             disabled={loading}
           >
-            <Text style={styles.RegisterLinkText}>Hesabınız yok mu? <Text style={styles.RegisterLinkBold}>Kaydolun</Text></Text>
+            <Text style={styles.RegisterLinkText}>
+              Hesabınız yok mu? <Text style={styles.RegisterLinkBold}>Kaydolun</Text>
+            </Text>
           </Pressable>
         </View>
 
@@ -211,7 +195,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 14,
     marginTop: 12,
-    borderColor: '#DDD',
     fontSize: 15,
   },
   Login: {
@@ -230,7 +213,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-    fontFamily: 'Poppins',
   },
   RegisterLink: {
     marginTop: 20,

@@ -15,96 +15,65 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import authService from '@/services/authService';  // ✅ Sadece bunu import et
 
 export default function SupportRequiredRegister() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState(''); // YYYY-MM-DD format
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
+    console.log('🚀 handleRegister başladı');
+    
     // Validations
-    if (!email.trim() || !username.trim() || !firstName.trim() || !lastName.trim() || !password || !confirmPassword) {
+    if (!email.trim() || !username.trim() || !fullName.trim() || !password || !confirmPassword) {
       Alert.alert('Hata', 'Lütfen tüm zorunlu alanları doldurun.');
       return;
     }
+    
     if (password !== confirmPassword) {
       Alert.alert('Hata', 'Şifreler eşleşmiyor.');
       return;
     }
+    
     if (password.length < 8) {
       Alert.alert('Hata', 'Şifre en az 8 karakter olmalıdır.');
       return;
     }
 
-    // Doğum tarihi formatı kontrolü (YYYY-MM-DD)
-    if (dateOfBirth && !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
-      Alert.alert('Hata', 'Doğum tarihi formatı: YYYY-MM-DD (örn: 2010-05-15)');
-      return;
-    }
-
     setLoading(true);
 
-    // Backend'e gönderilecek data
-    const registerData = {
-      email: email.trim(),
-      username: username.trim(),
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      date_of_birth: dateOfBirth.trim() || null,
-      user_type: 'support_required', // Desteğe ihtiyacı olan birey
-      password: password,
-      password_confirm: confirmPassword,
-    };
-
     try {
-      const response = await fetch('http://localhost:8000/api/users/register/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(registerData),
+      // ✅ Backend'deki ROLE_CHOICES ile eşleşmeli: 'support_required_individual'
+      const response = await authService.register({
+        email: email.trim().toLowerCase(),
+        username: username.trim(),
+        full_name: fullName.trim(),
+        role: 'support_required_individual',  // ✅ Model'deki choice değeri
+        password: password,
+        password_confirm: confirmPassword,
       });
 
-      const data = await response.json();
+      console.log('✅ Kayıt başarılı!');
+      console.log('👤 User:', response.user);
 
-      if (response.ok) {
-        // Kayıt başarılı
-        console.log('Kayıt başarılı:', data.user);
-        console.log('Access Token:', data.tokens.access);
-        console.log('Refresh Token:', data.tokens.refresh);
+      Alert.alert(
+        'Başarılı', 
+        response.message || 'Kayıt işlemi başarılı!', 
+        [
+          { 
+            text: 'Tamam', 
+            onPress: () => router.push('/SupportRequiredIndividuals/SupportRequiredLogin') 
+          },
+        ]
+      );
 
-        // TODO: AsyncStorage'a token kaydet
-        // await AsyncStorage.setItem('access_token', data.tokens.access);
-        // await AsyncStorage.setItem('refresh_token', data.tokens.refresh);
-        // await AsyncStorage.setItem('user', JSON.stringify(data.user));
-
-        Alert.alert('Başarılı', 'Kayıt işlemi başarılı! Giriş yapabilirsiniz.', [
-          { text: 'Tamam', onPress: () => router.push('/SupportRequiredIndividuals/SupportRequiredLogin') },
-        ]);
-      } else {
-        // Hata mesajlarını göster
-        let errorMessage = 'Kayıt başarısız.';
-        if (data.email) {
-          errorMessage = data.email[0];
-        } else if (data.username) {
-          errorMessage = data.username[0];
-        } else if (data.password) {
-          errorMessage = data.password[0];
-        } else if (data.date_of_birth) {
-          errorMessage = data.date_of_birth[0];
-        } else if (data.detail) {
-          errorMessage = data.detail;
-        }
-        Alert.alert('Hata', errorMessage);
-      }
-    } catch (error) {
-      console.error('Kayıt hatası:', error);
-      Alert.alert('Hata', 'Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.');
+    } catch (error: any) {
+      console.error('❌ Register hatası:', error);
+      Alert.alert('Hata', error.message || 'Kayıt başarısız.');
     } finally {
       setLoading(false);
     }
@@ -118,6 +87,7 @@ export default function SupportRequiredRegister() {
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <TopQuarterCircle style={styles.TopQuarterCircle} />
+        
         <Pressable
           style={styles.backButton}
           onPress={() => router.back()}
@@ -130,6 +100,7 @@ export default function SupportRequiredRegister() {
             resizeMode="contain"
           />
         </Pressable>
+        
         <Image source={require('../../assets/images/logoindividual.png')} style={styles.LogoStyle} />
 
         <Text style={styles.IndividualText}>Desteğe İhtiyacı Olan Birey Kaydı</Text>
@@ -160,29 +131,10 @@ export default function SupportRequiredRegister() {
 
           <TextInput
             style={styles.input}
-            placeholder="Ad *"
+            placeholder="Ad Soyad *"
             autoCapitalize="words"
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholderTextColor="#999"
-            editable={!loading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Soyad *"
-            autoCapitalize="words"
-            value={lastName}
-            onChangeText={setLastName}
-            placeholderTextColor="#999"
-            editable={!loading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Doğum Tarihi (YYYY-MM-DD, opsiyonel)"
-            value={dateOfBirth}
-            onChangeText={setDateOfBirth}
+            value={fullName}
+            onChangeText={setFullName}
             placeholderTextColor="#999"
             editable={!loading}
           />

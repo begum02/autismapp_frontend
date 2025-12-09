@@ -43,7 +43,7 @@ export default function RoleSelection() {
 
       <Pressable
         style={styles.button}
-        onPress={() => router.push("/SupportedPersonRegister")}
+        onPress={() => router.push("/SupportRequiredIndividuals/SupportRequiredLoginOrRegister")}
         accessibilityRole="button"
       >
           <Image source={require('../assets/images/Consulting.png')} style={styles.image}/>
@@ -126,4 +126,3 @@ const styles = StyleSheet.create({
   }
 
 });
-

@@ -3,6 +3,7 @@ import Card from '@/components/Card';
 import CustomWeekCalendar from '@/components/CustomWeekCalendar';
 import PlusButton from '@/components/PlusButton';
 import TaskForm from '@/components/TaskForm';
+import TaskFormForSupportRequired from '@/components/TaskFormForSupportRequired';
 import TopQuarterCircle from '@/components/TopQuarterCircle';
 import taskService from '@/services/taskService';
 import dayjs from 'dayjs';
@@ -90,35 +91,28 @@ export default function ResponsiblePersonFollowUp() {
     date: Date;
     timeStart?: { hours: number; minutes: number } | null;
     timeEnd?: { hours: number; minutes: number } | null;
-    assignedUserId?: number; // Responsible person başkasına atayabilir
+    lottieAnimation?: string | null;
   }) => {
     try {
-      const startTime = data.timeStart 
-        ? `${data.timeStart.hours.toString().padStart(2, '0')}:${data.timeStart.minutes.toString().padStart(2, '0')}`
-        : undefined;
-      const endTime = data.timeEnd
-        ? `${data.timeEnd.hours.toString().padStart(2, '0')}:${data.timeEnd.minutes.toString().padStart(2, '0')}`
-        : undefined;
-
       const taskData = {
         title: data.title,
         description: data.details,
         scheduled_date: dayjs(data.date).format('YYYY-MM-DD'),
-        start_time: startTime,
-        end_time: endTime,
-        assigned_to: data.assignedUserId || userId, // Seçili kullanıcı veya kendisi
-        created_by: userId, // Her zaman oluşturan
+        start_time: data.timeStart 
+          ? `${String(data.timeStart.hours).padStart(2, '0')}:${String(data.timeStart.minutes).padStart(2, '0')}:00`
+          : '09:00:00',
+        end_time: data.timeEnd
+          ? `${String(data.timeEnd.hours).padStart(2, '0')}:${String(data.timeEnd.minutes).padStart(2, '0')}:00`
+          : undefined,
+        lottie_animation: data.lottieAnimation, // Backend'e gönder
+        assigned_to: selectedChildId, // Destekli bireyin ID'si
+        created_by: user.id,
       };
 
       await taskService.createTask(taskData);
-      
-      Alert.alert('Başarılı', 'Görev başarıyla oluşturuldu');
-      closeTaskForm();
-      
-      await loadTasks();
+      Alert.alert('✅ Başarılı', 'Görev oluşturuldu');
     } catch (error: any) {
-      console.error('Error creating task:', error);
-      Alert.alert('Hata', error.message || 'Görev oluşturulurken bir hata oluştu');
+      Alert.alert('❌ Hata', error.message || 'Görev oluşturulamadı');
     }
   };
 
