@@ -16,13 +16,12 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import authService from '@/services/authService';
 
 export default function ResponsiblePersonRegister() {
-  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'parent' | 'teacher' | 'caregiver'>('parent');
@@ -30,14 +29,23 @@ export default function ResponsiblePersonRegister() {
 
   const handleRegister = async () => {
     // Validations
-    if (!email.trim() || !username.trim() || !firstName.trim() || !lastName.trim() || !password || !confirmPassword) {
+    if (!username.trim() || !email.trim() || !fullName.trim() || !password || !confirmPassword) {
       Alert.alert('Hata', 'Lütfen tüm zorunlu alanları doldurun.');
       return;
     }
+
+    // Email format kontrolü
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Hata', 'Lütfen geçerli bir email adresi girin.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       Alert.alert('Hata', 'Şifreler eşleşmiyor.');
       return;
     }
+    
     if (password.length < 8) {
       Alert.alert('Hata', 'Şifre en az 8 karakter olmalıdır.');
       return;
@@ -45,63 +53,55 @@ export default function ResponsiblePersonRegister() {
 
     setLoading(true);
 
-    // Backend'e gönderilecek data
-    const registerData = {
-      email: email.trim(),
-      username: username.trim(),
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      phone: phone.trim() || null,
-      user_type: 'responsible',
-      role: role, // 'parent', 'teacher', 'caregiver'
-      password: password,
-      password_confirm: confirmPassword,
-    };
-
     try {
-      const response = await fetch('http://localhost:8000/api/users/register/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(registerData),
-      });
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📝 SORUMLU KİŞİ KAYDI BAŞLATILIYOR');
+      console.log('👤 Username:', username.trim());
+      console.log('📧 Email:', email.trim());
+      console.log('👤 Full Name:', fullName.trim());
+      console.log('🎭 Role:', role);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      const data = await response.json();
+      // ✅ authService kullan
+      const registerData = {
+        email: email.trim().toLowerCase(),
+        username: username.trim(),
+        full_name: fullName.trim(),
+        role: 'responsible_person',
+        password: password,
+        password_confirm: confirmPassword,
+      };
 
-      if (response.ok) {
-        // Kayıt başarılı
-        console.log('Kayıt başarılı:', data.user);
-        console.log('Access Token:', data.tokens.access);
-        console.log('Refresh Token:', data.tokens.refresh);
+      console.log('📦 Register data:', JSON.stringify(registerData, null, 2));
 
-        // TODO: AsyncStorage'a token kaydet
-        // await AsyncStorage.setItem('access_token', data.tokens.access);
-        // await AsyncStorage.setItem('refresh_token', data.tokens.refresh);
-        // await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      const response = await authService.register(registerData);
 
-        Alert.alert('Başarılı', 'Kayıt işlemi başarılı! Giriş yapabilirsiniz.', [
-          { text: 'Tamam', onPress: () => router.push('/parent/ResponsiblePersonLogin') },
-        ]);
-      } else {
-        // Hata mesajlarını göster
-        let errorMessage = 'Kayıt başarısız.';
-        if (data.email) {
-          errorMessage = data.email[0];
-        } else if (data.username) {
-          errorMessage = data.username[0];
-        } else if (data.password) {
-          errorMessage = data.password[0];
-        } else if (data.role) {
-          errorMessage = data.role[0];
-        } else if (data.detail) {
-          errorMessage = data.detail;
-        }
-        Alert.alert('Hata', errorMessage);
-      }
-    } catch (error) {
-      console.error('Kayıt hatası:', error);
-      Alert.alert('Hata', 'Bağlantı hatası. Lütfen internet bağlantınızı kontrol edin.');
+      console.log('✅ Kayıt başarılı!');
+      console.log('👤 User:', response.user);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      Alert.alert(
+        'Başarılı', 
+        'Kayıt işlemi başarılı! Ana sayfaya yönlendiriliyorsunuz.',
+        [
+          { 
+            text: 'Tamam', 
+            onPress: () => {
+              router.replace('/parent/ResponsiblePersonFollowUp');
+            }
+          },
+        ]
+      );
+
+    } catch (error: any) {
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('❌ KAYIT HATASI');
+      console.error('❌ Error:', error);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      const errorMessage = error.message || 'Kayıt başarısız. Lütfen tekrar deneyin.';
+      Alert.alert('Hata', errorMessage);
+
     } finally {
       setLoading(false);
     }
@@ -134,6 +134,16 @@ export default function ResponsiblePersonRegister() {
         <View style={styles.form}>
           <TextInput
             style={styles.input}
+            placeholder="Kullanıcı adı *"
+            autoCapitalize="none"
+            value={username}
+            onChangeText={setUsername}
+            placeholderTextColor="#999"
+            editable={!loading}
+          />
+
+          <TextInput
+            style={styles.input}
             placeholder="E-posta *"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -147,40 +157,10 @@ export default function ResponsiblePersonRegister() {
 
           <TextInput
             style={styles.input}
-            placeholder="Kullanıcı adı *"
-            autoCapitalize="none"
-            value={username}
-            onChangeText={setUsername}
-            placeholderTextColor="#999"
-            editable={!loading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Ad *"
+            placeholder="Ad Soyad *"
             autoCapitalize="words"
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholderTextColor="#999"
-            editable={!loading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Soyad *"
-            autoCapitalize="words"
-            value={lastName}
-            onChangeText={setLastName}
-            placeholderTextColor="#999"
-            editable={!loading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Telefon (opsiyonel)"
-            keyboardType="phone-pad"
-            value={phone}
-            onChangeText={setPhone}
+            value={fullName}
+            onChangeText={setFullName}
             placeholderTextColor="#999"
             editable={!loading}
           />

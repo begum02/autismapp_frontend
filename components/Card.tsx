@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   timeLine: {
     flexDirection: "column",
     justifyContent: "space-between",
-    marginRight: 12,
+    marginRight: -7,
     height: 100,
   },
   leftTopOfCardStartTime: {

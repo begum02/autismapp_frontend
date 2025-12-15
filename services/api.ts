@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Backend URL
 const API_BASE_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:8000/api'
-  : 'http://192.168.1.57:8000/api';
+  : 'http://localhost:8000/api';
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 

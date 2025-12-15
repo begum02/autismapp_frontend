@@ -14,6 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/services/api';
+import TopQuarterCircle from '@/components/TopQuarterCircle';
+import BottomQuarterCircle from '@/components/BottomQuarterCircle';
 
 // ============= TYPES =============
 interface User {
@@ -37,7 +39,7 @@ interface Invitation {
 export default function EmailsScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [newEmail, setNewEmail] = useState("");
-  const [invitations, setInvitations] = useState<Invitation[]>([]); // ✅ Başlangıç değeri boş array
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -47,7 +49,6 @@ export default function EmailsScreen() {
 
   const checkAuth = async () => {
     try {
-      // Token kontrolü
       const token = await AsyncStorage.getItem('access_token');
       console.log('🔍 Token kontrolü:', token ? 'VAR ✅' : 'YOK ❌');
       
@@ -61,7 +62,6 @@ export default function EmailsScreen() {
         return;
       }
 
-      // User bilgisini al
       const userJson = await AsyncStorage.getItem('user');
       if (userJson) {
         const currentUser = JSON.parse(userJson);
@@ -69,7 +69,6 @@ export default function EmailsScreen() {
         console.log('✅ User yüklendi:', currentUser.email);
       }
 
-      // Davetleri yükle
       await loadInvitations();
     } catch (error) {
       console.error('❌ Auth kontrolü hatası:', error);
@@ -84,27 +83,20 @@ export default function EmailsScreen() {
       const response = await api.get('/otp/invitations/');
       
       console.log('✅ Response alındı:', response);
-      console.log('✅ Response data:', JSON.stringify(response.data, null, 2));
       
-      // ✅ Response yapısını kontrol et
       if (!response || !response.data) {
         console.error('❌ Response veya data undefined!');
         setInvitations([]);
         return;
       }
       
-      // Backend'den gelen yapıya göre ayarla
       let invitationList: Invitation[] = [];
       
       if (response.data.invitations && Array.isArray(response.data.invitations)) {
-        // Backend: { invitations: [...], stats: {...} }
         invitationList = response.data.invitations;
-        console.log('📊 Stats:', response.data.stats);
       } else if (Array.isArray(response.data)) {
-        // Backend: [...]
         invitationList = response.data;
       } else if (response.data.results && Array.isArray(response.data.results)) {
-        // Backend: { results: [...], count: X } (paginated)
         invitationList = response.data.results;
       } else {
         console.error('❌ Beklenmeyen response formatı:', response.data);
@@ -116,12 +108,8 @@ export default function EmailsScreen() {
       
     } catch (error: any) {
       console.error('❌ Davet yükleme hatası:', error);
-      console.error('❌ Error response:', error.response);
-      console.error('❌ Error data:', error.response?.data);
+      setInvitations([]);
       
-      setInvitations([]); // Hata durumunda boş array
-      
-      // Kullanıcıya hata göster
       if (error.response?.status === 401) {
         Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.', [
           { text: 'Giriş Yap', onPress: () => router.push('/SupportRequiredIndividuals/SupportRequiredLogin') }
@@ -140,7 +128,6 @@ export default function EmailsScreen() {
       return;
     }
 
-    // Email formatı kontrolü
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmail.trim())) {
       Alert.alert('Hata', 'Lütfen geçerli bir email formatı girin.');
@@ -150,51 +137,21 @@ export default function EmailsScreen() {
     setLoading(true);
 
     try {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('📧 DAVET GÖNDERME BAŞLADI');
-      console.log('📧 Email:', newEmail.trim());
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📧 Davet gönderiliyor:', newEmail.trim());
       
-      const token = await AsyncStorage.getItem('access_token');
-      
-      if (!token) {
-        Alert.alert('Hata', 'Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.');
-        router.push('/SupportRequiredIndividuals/SupportRequiredLogin');
-        return;
-      }
-
-      console.log('🔑 Token var:', !!token);
-      
-      // ✅ Backend'in TAM OLARAK beklediği format
       const requestData = {
         responsible_email: newEmail.trim().toLowerCase(),
       };
-      
-      console.log('📦 Gönderilecek data:', JSON.stringify(requestData, null, 2));
 
-      // ✅ API çağrısı
-      const response = await api.post('/otp/invite/', requestData);
-
-      console.log('✅ Davet başarılı!');
-      console.log('📥 Response:', response.data);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      await api.post('/otp/invite/', requestData);
 
       Alert.alert('Başarılı', 'Davet başarıyla gönderildi!');
       
       setNewEmail('');
-      
-      // ✅ DÜZELT: fetchInvitations() → loadInvitations()
       await loadInvitations();
 
     } catch (error: any) {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('❌ DAVET HATASI');
-      console.error('❌ Error:', error);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error response:', error.response);
-      console.error('❌ Error response data:', error.response?.data);
-      console.error('❌ Error config:', error.config);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('❌ Davet hatası:', error.response?.data || error.message);
       
       const errorMessage = error.response?.data?.detail || 
                           error.response?.data?.responsible_email?.[0] ||
@@ -213,7 +170,7 @@ export default function EmailsScreen() {
       
       console.log('🔄 Kod yeniden gönderiliyor:', invitation.responsible_email);
       
-      const response = await api.post('/otp/invite/', {
+      await api.post('/otp/invite/', {
         responsible_email: invitation.responsible_email,
       });
       
@@ -245,17 +202,19 @@ export default function EmailsScreen() {
     );
   };
 
+  const handleGoToTasks = () => {
+    router.push('/SupportRequiredIndividuals/SupportRequiredTasks');
+  };
+
   const renderInvitationCard = (invitation: Invitation) => {
     const isCodeSent = invitation.status === 'pending' && !invitation.is_expired;
     const isAccepted = invitation.status === 'accepted';
     
     return (
       <View key={invitation.id} style={styles.emailCard}>
-        {/* Email Address */}
         <View style={styles.emailRow}>
           <Text style={styles.emailText}>{invitation.responsible_email}</Text>
           
-          {/* Edit & Delete Icons */}
           <View style={styles.iconButtons}>
             <TouchableOpacity 
               style={styles.iconButton}
@@ -273,7 +232,6 @@ export default function EmailsScreen() {
           </View>
         </View>
 
-        {/* Status Button */}
         {isAccepted ? (
           <View style={styles.acceptedButton}>
             <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
@@ -307,43 +265,21 @@ export default function EmailsScreen() {
     );
   };
 
-  // ✅ Array kontrolleri - invitations undefined olabilir
   const acceptedCount = invitations?.filter(inv => inv.status === 'accepted').length || 0;
-  const hasPendingInvitations = invitations?.some(
-    inv => inv.status === 'pending' && !inv.is_expired
-  ) || false;
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#2F3C7E" />
-        </TouchableOpacity>
-        
-        <View style={styles.headerContent}>
-          <Ionicons name="time-outline" size={24} color="#FFD700" />
-          <Text style={styles.headerTitle}>PlanBuddy</Text>
-        </View>
-        
-        <View style={{ width: 40 }} />
-      </View>
+      {/* Quarter Circles */}
+      <TopQuarterCircle style={styles.TopQuarterCircle} />
 
       {/* CONTENT */}
       <ScrollView 
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
-        refreshing={refreshing}
-        onRefresh={loadInvitations}
       >
-        {/* Title */}
         <Text style={styles.pageTitle}>Sorumlu Kişi Ekle</Text>
 
-        {/* New Email Input */}
         <View style={styles.addEmailSection}>
           <TextInput
             style={styles.emailInput}
@@ -369,7 +305,6 @@ export default function EmailsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Email List */}
         {invitations && invitations.length > 0 ? (
           <>
             {invitations.map(renderInvitationCard)}
@@ -385,21 +320,18 @@ export default function EmailsScreen() {
         )}
       </ScrollView>
 
-      {/* BOTTOM BUTTON */}
-      {acceptedCount > 0 && (
-        <View style={styles.bottomContainer}>
-          <TouchableOpacity 
-            style={styles.continueButton}
-            onPress={() => {
-              Alert.alert('Başarılı', `${acceptedCount} sorumlu kişi eklendi`, [
-                { text: 'Tamam', onPress: () => router.back() }
-              ]);
-            }}
-          >
-            <Text style={styles.continueButtonText}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Bottom Button - Her zaman göster */}
+      <View style={styles.bottomContainer}>
+        <TouchableOpacity 
+          style={styles.continueButton}
+          onPress={handleGoToTasks}
+        >
+          <Text style={styles.continueButtonText}>Görevlere Git</Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      <BottomQuarterCircle style={styles.BottomQuarterCircle} />
     </View>
   );
 }
@@ -409,35 +341,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5F7FA",
   },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 50,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+  TopQuarterCircle: {
+    position: "absolute",
+    top: 0,
+    left: -40,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#2F3C7E",
+  BottomQuarterCircle: {
+    position: "absolute",
+    right: -40,
+    bottom: 0,
   },
   content: {
     flex: 1,
+    marginTop: 60,
   },
   contentContainer: {
     padding: 20,
@@ -594,17 +510,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 20,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#E0E0E0",
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    zIndex: 10,
   },
   continueButton: {
     height: 55,
-    backgroundColor: "#2F3C7E",
+    backgroundColor: "#AAAFCA",
     borderRadius: 12,
+    flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    gap: 8,
   },
   continueButtonText: {
     color: "#fff",

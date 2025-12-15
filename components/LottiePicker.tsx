@@ -5,34 +5,30 @@ import LottieView from "lottie-react-native";
 // Animasyon listesi - assets/animations/ klasöründen
 const animations = [
   {
-    id: "prepare-bag",
+    id: "preparing-bag",
     title: "Çanta Hazırla",
-    source: require("../assets/animations/3D bag.json"),
+    source: require("../assets/animations/preparing-bag.json"),
   },
   {
-    id: "brush-teeth",
+    id: "brushing-teeth",
     title: "Diş Fırçala",
-    source: require("../assets/animations/Brush Guideline 6.json"),
+    source: require("../assets/animations/brushing-teeth.json"),
   },
   {
     id: "plug-device",
     title: "Şarj Et",
-    source: require("../assets/animations/Blue light plug.json"),
+    source: require("../assets/animations/plug-device.json"),
   },
+
   {
-    id: "hand-washing",
-    title: "El Yıka",
-    source: require("../assets/animations/Hand Washing.json"),
-  },
-  {
-    id: "wash-hands-covid",
+    id: "washing-hands",
     title: "El Dezenfekte",
-    source: require("../assets/animations/Covid-19 wash.json"),
+    source: require("../assets/animations/washing-hands.json"),
   },
   {
     id: "shower",
     title: "Duş Al",
-    source: require("../assets/animations/Shower.json"),
+    source: require("../assets/animations/shower.json"),
   },
   {
     id: "toilet",
@@ -40,14 +36,14 @@ const animations = [
     source: require("../assets/animations/toilet.json"),
   },
   {
-    id: "drink-water",
+    id: "drinking-water",
     title: "Su İç",
-    source: require("../assets/animations/water animation.json"),
+    source: require("../assets/animations/drinking-water.json"),
   },
   {
     id: "washing-machine",
     title: "Çamaşır Yıka",
-    source: require("../assets/animations/Washing Machine.json"),
+    source: require("../assets/animations/washing-machine.json"),
   },
 ];
 

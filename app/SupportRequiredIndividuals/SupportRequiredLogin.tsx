@@ -34,7 +34,7 @@ export default function SupportRequiredLogin() {
       console.log('🔐 Login başlatılıyor...');
       
       const response = await authService.login({
-        email: email.trim().toLowerCase(),
+        email_or_username: email.trim().toLowerCase(), // ✅ Değişiklik burada
         password: password,
       });
 

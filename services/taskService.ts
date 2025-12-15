@@ -1,174 +1,221 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from './api';
 
-const API_URL = 'http://localhost:8000/api';
-
-// ============= INTERFACES =============
-interface Task {
+export interface Task {
   id: number;
-  title: string;
-  description?: string;
-  scheduled_date: string;
-  start_time: string;
-  end_time?: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
-  lottie_animation?: string;
-  assigned_to?: number;
-  created_by?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface CreateTaskData {
   title: string;
   description?: string;
   scheduled_date: string;
   start_time?: string;
   end_time?: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   lottie_animation?: string;
+  created_by?: number;
   assigned_to?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
-interface TaskListResponse {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: Task[];
+export interface CreateTaskData {
+  title: string;
+  description?: string;
+  scheduled_date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  lottie_animation?: string | null;
+  assigned_to: number;
+  created_by: number; // ✅ Zorunlu alan eklendi
 }
 
-// ============= TASK SERVICE =============
+export interface UpdateTaskData {
+  title?: string;
+  description?: string;
+  scheduled_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  lottie_animation?: string | null;
+  status?: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+}
+
+export interface TaskFilters {
+  date?: string;
+  status?: string;
+  assigned_to?: number;
+  created_by?: number;
+}
+
 class TaskService {
-  async getTasks(filters?: {
-    date?: string;
-    status?: string;
-    assigned_to?: number;
-  }): Promise<TaskListResponse> {
+  private pollingInterval: number | null = null; // ✅ NodeJS.Timeout yerine number
+
+  // Görevleri listele
+  async getTasks(filters?: TaskFilters) {
     try {
-      console.log('📋 Görevler yükleniyor...', filters);
+      const params = new URLSearchParams();
       
-      const response = await api.get<TaskListResponse>('/tasks/', { params: filters });
-      
-      console.log(`✅ ${response.data.results?.length || 0} görev yüklendi`);
+      if (filters?.date) params.append('date', filters.date);
+      if (filters?.status) params.append('status', filters.status);
+      if (filters?.assigned_to) params.append('assigned_to', filters.assigned_to.toString());
+      if (filters?.created_by) params.append('created_by', filters.created_by.toString());
+
+      const response = await api.get(`/tasks/?${params.toString()}`);
       return response.data;
     } catch (error: any) {
-      console.error('❌ Görev yükleme hatası:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.detail || 'Görevler yüklenemedi');
+      console.error('❌ Görevler yüklenemedi:', error);
+      throw error;
     }
   }
 
-  async createTask(taskData: CreateTaskData): Promise<Task> {
+  // Yeni görev oluştur
+  async createTask(data: CreateTaskData) {
     try {
-      console.log('➕ Yeni görev oluşturuluyor:', taskData.title);
+      const cleanData = {
+        ...data,
+        start_time: data.start_time ?? undefined,
+        end_time: data.end_time ?? undefined,
+        lottie_animation: data.lottie_animation ?? undefined,
+        // created_by burada otomatik olarak kalacak
+      };
+
+      console.log('📤 Backend\'e gönderiliyor:', cleanData);
       
-      const response = await api.post<Task>('/tasks/create/', taskData);
-      
-      console.log('✅ Görev oluşturuldu:', response.data.id);
+      const response = await api.post('/tasks/create/', cleanData);
       return response.data;
     } catch (error: any) {
-      console.error('❌ Görev oluşturma hatası:', error.response?.data || error.message);
-      
-      if (error.response?.data?.title) {
-        throw new Error(error.response.data.title[0]);
+      console.error('❌ Görev oluşturma hatası:', error.response?.data || error);
+      throw error;
+    }
+  }
+
+  // Görevi güncelle
+  async updateTask(taskId: number, data: UpdateTaskData) {
+    try {
+      const cleanData = {
+        ...data,
+        start_time: data.start_time ?? undefined,
+        end_time: data.end_time ?? undefined,
+        lottie_animation: data.lottie_animation ?? undefined,
+      };
+
+      const response = await api.put(`/tasks/${taskId}/update/`, cleanData);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Görev güncelleme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Görevi başlat
+  async startTask(taskId: number) {
+    try {
+      const response = await api.post(`/tasks/${taskId}/start/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Görev başlatma hatası:', error);
+      throw error;
+    }
+  }
+
+  // Görevi tamamla
+  async completeTask(taskId: number) {
+    try {
+      const response = await api.post(`/tasks/${taskId}/complete/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Görev tamamlama hatası:', error);
+      throw error;
+    }
+  }
+
+  // Görevi iptal et
+  async cancelTask(taskId: number) {
+    try {
+      const response = await api.post(`/tasks/${taskId}/cancel/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Görev iptal hatası:', error);
+      throw error;
+    }
+  }
+
+  // Görevi sil
+  async deleteTask(taskId: number) {
+    try {
+      const response = await api.delete(`/tasks/${taskId}/delete/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Görev silme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Yeni task bildirimleri (Redis polling)
+  async checkNewTaskNotifications() {
+    try {
+      const response = await api.get('/tasks/notifications/');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Bildirim kontrolü hatası:', error);
+      return { has_new_task: false, task: null };
+    }
+  }
+
+  // Polling başlat (her 5 saniyede bir kontrol et)
+  startPolling(callback: (task: any) => void) {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+    }
+
+    console.log('🔄 Real-time polling başlatıldı');
+
+    this.pollingInterval = setInterval(async () => {
+      const result = await this.checkNewTaskNotifications();
+      if (result.has_new_task && result.task) {
+        console.log('🔔 Yeni görev bildirimi:', result.task);
+        callback(result.task);
       }
-      if (error.response?.data?.scheduled_date) {
-        throw new Error(error.response.data.scheduled_date[0]);
-      }
-      
-      throw new Error(error.response?.data?.detail || 'Görev oluşturulamadı');
+    }, 5000) as unknown as number; // ✅ Type assertion
+  }
+
+  // Polling durdur
+  stopPolling() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+      console.log('⏹️ Real-time polling durduruldu');
     }
   }
 
-  async updateTask(taskId: number, taskData: Partial<CreateTaskData>): Promise<Task> {
+  // ✅ Bugün tamamlanan görev sayısı
+  async getTodayCompletedCount() {
     try {
-      console.log('✏️ Görev güncelleniyor:', taskId);
-      
-      const response = await api.patch<Task>(`/tasks/${taskId}/update/`, taskData);
-      
-      console.log('✅ Görev güncellendi');
+      const response = await api.get('/tasks/today-completed-count/');
       return response.data;
     } catch (error: any) {
-      console.error('❌ Görev güncelleme hatası:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.detail || 'Görev güncellenemedi');
+      console.error('❌ Bugün tamamlanan görev sayısı alınamadı:', error);
+      throw error;
     }
   }
 
-  async deleteTask(taskId: number): Promise<void> {
+  // ✅ Kullanıcı istatistikleri
+  async getUserStatistics(userId: number) {
     try {
-      console.log('🗑️ Görev siliniyor:', taskId);
-      
-      await api.delete(`/tasks/${taskId}/delete/`);
-      
-      console.log('✅ Görev silindi');
-    } catch (error: any) {
-      console.error('❌ Görev silme hatası:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.detail || 'Görev silinemedi');
-    }
-  }
-
-  async startTask(taskId: number): Promise<Task> {
-    try {
-      console.log('▶️ Görev başlatılıyor:', taskId);
-      
-      const response = await api.post<Task>(`/tasks/${taskId}/start/`);
-      
-      console.log('✅ Görev başlatıldı');
+      const response = await api.get(`/tasks/statistics/${userId}/`);
       return response.data;
     } catch (error: any) {
-      console.error('❌ Görev başlatma hatası:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.detail || 'Görev başlatılamadı');
+      console.error('❌ Kullanıcı istatistikleri alınamadı:', error);
+      throw error;
     }
   }
 
-  async completeTask(taskId: number): Promise<Task> {
+  // ✅ Atanabilir kullanıcılar listesi
+  async getAssignableUsers() {
     try {
-      console.log('✅ Görev tamamlanıyor:', taskId);
-      
-      const response = await api.post<Task>(`/tasks/${taskId}/complete/`);
-      
-      console.log('✅ Görev tamamlandı');
+      const response = await api.get('/tasks/assignable-users/');
       return response.data;
     } catch (error: any) {
-      console.error('❌ Görev tamamlama hatası:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.detail || 'Görev tamamlanamadı');
-    }
-  }
-
-  async cancelTask(taskId: number): Promise<Task> {
-    try {
-      console.log('❌ Görev iptal ediliyor:', taskId);
-      
-      const response = await api.post<Task>(`/tasks/${taskId}/cancel/`);
-      
-      console.log('✅ Görev iptal edildi');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Görev iptal hatası:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.detail || 'Görev iptal edilemedi');
-    }
-  }
-
-  async getStatistics() {
-    try {
-      const response = await api.get('/tasks/statistics/');
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ İstatistik hatası:', error);
-      throw new Error('İstatistikler yüklenemedi');
-    }
-  }
-
-  async getTodayCompletedCount(): Promise<number> {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const response = await this.getTasks({ date: today, status: 'completed' });
-      return response.results?.length || 0;
-    } catch (error) {
-      console.error('getTodayCompletedCount error:', error);
-      return 0;
+      console.error('❌ Atanabilir kullanıcılar alınamadı:', error);
+      throw error;
     }
   }
 }
 
 export default new TaskService();
-
-export type { Task, CreateTaskData, TaskListResponse };
