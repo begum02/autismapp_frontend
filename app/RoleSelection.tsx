@@ -65,8 +65,8 @@ const styles = StyleSheet.create({
   },
   BottomQuarterCircle: {
     position: "absolute",
-    right:-60,
-    bottom:-200
+    right:-40,
+    bottom:-100,
   },
   ButtonsContainer: {
     position:'relative',

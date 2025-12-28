@@ -140,6 +140,15 @@ export default function SupportRequiredLogin() {
               Hesabınız yok mu? <Text style={styles.RegisterLinkBold}>Kaydolun</Text>
             </Text>
           </Pressable>
+
+          {/* Şifremi Unuttum */}
+          <Pressable
+            style={styles.forgotPassword}
+            onPress={() => router.push('/ForgotPassword')}
+            disabled={loading}
+          >
+            <Text style={styles.forgotPasswordText}>Şifremi Unuttum</Text>
+          </Pressable>
         </View>
 
         <BottomQuarterCircle style={styles.BottomQuarterCircle} />
@@ -241,5 +250,13 @@ const styles = StyleSheet.create({
   backIcon: {
     width: '100%',
     height: '100%',
+  },
+  forgotPassword: {
+    marginTop: 10,
+  },
+  forgotPasswordText: {
+    color: '#2F3C7E',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });

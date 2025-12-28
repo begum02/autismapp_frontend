@@ -14,10 +14,9 @@ type Props = {
     end_time?: string;
     status: string;
   } | null;
-  onEdit: () => void;
+  onEdit?: () => void;      // opsiyonel
   onDelete: () => void;
-  onComplete: () => void;
-  onStart: () => void;
+  onComplete?: () => void;  // opsiyonel
 };
 
 export default function EditModal({
@@ -26,8 +25,7 @@ export default function EditModal({
   task,
   onEdit,
   onDelete,
-  onComplete,
-  onStart,
+  onComplete
 }: Props) {
   if (!task) return null;
 
@@ -120,25 +118,11 @@ export default function EditModal({
                     style={[styles.actionButton, styles.editButton]} 
                     onPress={() => {
                       onClose();
-                      onEdit();
+                      onEdit && onEdit();
                     }}
                   >
                     <Ionicons name="create-outline" size={22} color="#fff" />
                     <Text style={styles.actionButtonText}>Düzenle</Text>
-                  </Pressable>
-                )}
-
-                {/* Start Button - Sadece pending için */}
-                {isPending && (
-                  <Pressable 
-                    style={[styles.actionButton, styles.startButton]} 
-                    onPress={() => {
-                      onClose();
-                      onStart();
-                    }}
-                  >
-                    <Ionicons name="play-circle-outline" size={22} color="#fff" />
-                    <Text style={styles.actionButtonText}>Başlat</Text>
                   </Pressable>
                 )}
 
@@ -148,7 +132,7 @@ export default function EditModal({
                     style={[styles.actionButton, styles.completeButton]} 
                     onPress={() => {
                       onClose();
-                      onComplete();
+                      onComplete && onComplete();
                     }}
                   >
                     <Ionicons name="checkmark-circle-outline" size={22} color="#fff" />

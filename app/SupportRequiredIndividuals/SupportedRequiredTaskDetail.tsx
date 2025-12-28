@@ -6,12 +6,13 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import TopQuarterCircle from '@/components/TopQuarterCircle';
 import BottomQuarterCircle from '@/components/BottomQuarterCircle';
-import taskService from '@/services/taskService';
+import taskService from '../../services/taskService';
 import { Audio } from 'expo-av';
 import LottieView from 'lottie-react-native';
 import { Animated } from 'react-native';
@@ -32,15 +33,20 @@ interface Task {
 
 // ✅ Lottie dosyalarını import et
 const LOTTIE_ANIMATIONS: Record<string, any> = {
-  'brushing-teeth': require('@/assets/animations/brushing-teeth.json'),
-  'washing-hands': require('@/assets/animations/washing-hands.json'),
   'preparing-bag': require('@/assets/animations/preparing-bag.json'),
-  'drinking-water': require('@/assets/animations/drinking-water.json'),
+  'brushing-teeth': require('@/assets/animations/brushing-teeth.json'),
   'plug-device': require('@/assets/animations/plug-device.json'),
+  'washing-hands': require('@/assets/animations/washing-hands.json'),
   'shower': require('@/assets/animations/shower.json'),
   'toilet': require('@/assets/animations/toilet.json'),
-  
-
+  'drinking-water': require('@/assets/animations/drinking-water.json'),
+  'washing-machine': require('@/assets/animations/washing-machine.json'),
+  'relax': require('@/assets/animations/relax.json'),
+  'set-table': require('@/assets/animations/set-table.json'),
+  'exercise': require('@/assets/animations/exercise.json'),
+  'sleep': require('@/assets/animations/sleep.json'),
+  'cleaning': require('@/assets/animations/cleaning.json'),
+  'trash': require('@/assets/animations/trash.json'),
 };
 
 export default function SupportedRequiredTaskDetail() {
@@ -55,6 +61,7 @@ export default function SupportedRequiredTaskDetail() {
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [totalSeconds, setTotalSeconds] = useState(0);
   const [rating, setRating] = useState(0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   
   const pulseAnim = useState(new Animated.Value(1))[0];
   const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null); // ✅ Tip düzeltildi
@@ -148,18 +155,11 @@ export default function SupportedRequiredTaskDetail() {
         timerInterval.current = null;
       }
       setIsTimerRunning(false);
-      
       lottieRef.current?.pause();
-      
       if (task) {
         try {
           await taskService.completeTask(task.id);
-          Alert.alert('✅ Başarılı', 'Görev tamamlandı!', [
-            { 
-              text: 'Tamam', 
-              onPress: () => {}
-            }
-          ]);
+          setShowSuccessModal(true); // ✅ Success modal aç
         } catch (error: any) {
           console.error('❌ Görev tamamlama hatası:', error);
           Alert.alert('Hata', error.message || 'Görev tamamlanamadı');
@@ -170,12 +170,9 @@ export default function SupportedRequiredTaskDetail() {
         Alert.alert('Uyarı', 'Bu görev için süre tanımlanmamış');
         return;
       }
-
       setIsTimerRunning(true);
       setRemainingSeconds(totalSeconds);
-      
       lottieRef.current?.play();
-      
       if (task) {
         try {
           await taskService.startTask(task.id);
@@ -183,7 +180,6 @@ export default function SupportedRequiredTaskDetail() {
           console.error('❌ Görev başlatma hatası:', error);
         }
       }
-      
       timerInterval.current = setInterval(() => {
         setRemainingSeconds(prev => {
           if (prev <= 1) {
@@ -193,22 +189,14 @@ export default function SupportedRequiredTaskDetail() {
             }
             setIsTimerRunning(false);
             lottieRef.current?.pause();
-            
-            Alert.alert('⏰ Süre Doldu!', 'Görev süresi tamamlandı', [
-              {
-                text: 'Tamam',
-                onPress: async () => {
-                  if (task) {
-                    try {
-                      await taskService.completeTask(task.id);
-                    } catch (error: any) {
-                      console.error('❌ Görev tamamlama hatası:', error);
-                    }
-                  }
-                }
+            setShowSuccessModal(true); // ✅ Success modal aç
+            if (task) {
+              try {
+                taskService.completeTask(task.id);
+              } catch (error: any) {
+                console.error('❌ Görev tamamlama hatası:', error);
               }
-            ]);
-            
+            }
             return 0;
           }
           return prev - 1;
@@ -242,6 +230,13 @@ export default function SupportedRequiredTaskDetail() {
     }
     
     return LOTTIE_ANIMATIONS[animationName] || null;
+  };
+
+  const handleComplete = async () => {
+    if (!task) return;
+    await taskService.completeTask(task.id);
+    // Burada backend, sorumlu kişiye push notification yollar (backend tarafında)
+    // İstersen burada local bir bildirim de gösterebilirsin
   };
 
   if (loading) {
@@ -339,11 +334,7 @@ export default function SupportedRequiredTaskDetail() {
 
         <Text style={styles.timerText}>{formatTime(remainingSeconds)}</Text>
 
-        {totalSeconds > 0 && (
-          <Text style={styles.progressText}>
-            {Math.round((remainingSeconds / totalSeconds) * 100)}% kaldı
-          </Text>
-        )}
+        {/* % kaldı yazısı ve progress bar kaldırıldı */}
 
         {!isTimerRunning && remainingSeconds === 0 && totalSeconds > 0 && (
           <View style={styles.ratingContainer}>
@@ -363,6 +354,31 @@ export default function SupportedRequiredTaskDetail() {
           </View>
         )}
       </View>
+
+      {/* Motive Edici Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Ionicons name="trophy" size={64} color="#FFD700" style={{marginBottom: 16}} />
+            <Text style={styles.modalTitle}>Harika!</Text>
+            <Text style={styles.modalText}>Görevi başarıyla tamamladın 🎉</Text>
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.back();
+              }}
+            >
+              <Text style={styles.modalButtonText}>Devam Et</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <BottomQuarterCircle style={styles.bottomQuarterCircle}/>
     </View>
@@ -530,4 +546,45 @@ const styles = StyleSheet.create({
     top: 0,
   },
 
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    width: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: PRIMARY,
+    marginBottom: 8,
+  },
+  modalText: {
+    fontSize: 18,
+    color: '#444',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  modalButton: {
+    backgroundColor: PRIMARY,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
 });

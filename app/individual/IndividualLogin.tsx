@@ -156,7 +156,7 @@ export default function IndividualLogin() {
 
           <Pressable
             style={styles.forgotPassword}
-            onPress={() => router.push('/individual/ForgotPassword')}
+            onPress={() => router.push('/ForgotPassword')}
             disabled={loading}
           >
             <Text style={styles.forgotPasswordText}>Şifremi Unuttum</Text>

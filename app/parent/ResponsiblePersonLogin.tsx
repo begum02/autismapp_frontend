@@ -156,7 +156,7 @@ export default function ResponsiblePersonLogin() {
 
           <Pressable
             style={styles.forgotPassword}
-            onPress={() => router.push('/ForgotPassword')}  // ✅ Düzeltildi
+            onPress={() => router.push('/ForgotPassword')}
             disabled={loading}
           >
             <Text style={styles.forgotPasswordText}>Şifremi Unuttum</Text>

@@ -43,7 +43,7 @@ export default function SupportRequiredLoginOrRegister() {
         {/* Arka plan şekilleri */}
     
         <Image source={require('../../assets/images/Consulting.png')} style={styles.IndividualImage} />
-         <Text style={styles.IndividualText}>Sorumlu kişi girişi</Text>
+         <Text style={styles.IndividualText}>Destek gereksinimli birey girişi</Text>
          <Pressable style={styles.Register} onPress={handleRegister}>
            <Text style={styles.RegisterText}>Kaydol</Text>
          

@@ -34,10 +34,16 @@ export interface UpdateTaskData {
   end_time?: string | null;
   lottie_animation?: string | null;
   status?: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  assigned_to?: number;   // <-- EKLE
+  created_by?: number;    // <-- EKLE
+  category?: string;
+  task_type?: string;
+  priority?: string;
+  difficulty_level?: string;
 }
 
 export interface TaskFilters {
-  date?: string;
+  scheduled_date?: string;
   status?: string;
   assigned_to?: number;
   created_by?: number;
@@ -50,8 +56,9 @@ class TaskService {
   async getTasks(filters?: TaskFilters) {
     try {
       const params = new URLSearchParams();
-      
-      if (filters?.date) params.append('date', filters.date);
+
+      // scheduled_date varsa, API'ye 'date' olarak gönder
+      if (filters?.scheduled_date) params.append('date', filters.scheduled_date);
       if (filters?.status) params.append('status', filters.status);
       if (filters?.assigned_to) params.append('assigned_to', filters.assigned_to.toString());
       if (filters?.created_by) params.append('created_by', filters.created_by.toString());
@@ -86,7 +93,7 @@ class TaskService {
   }
 
   // Görevi güncelle
-  async updateTask(taskId: number, data: UpdateTaskData) {
+  async updateTask(taskId: number, data: UpdateTaskData, method: 'put' | 'patch' = 'put') {
     try {
       const cleanData = {
         ...data,
@@ -94,8 +101,10 @@ class TaskService {
         end_time: data.end_time ?? undefined,
         lottie_animation: data.lottie_animation ?? undefined,
       };
-
-      const response = await api.put(`/tasks/${taskId}/update/`, cleanData);
+      const url = `/tasks/${taskId}/update/`;
+      const response = method === 'patch'
+        ? await api.patch(url, cleanData)
+        : await api.put(url, cleanData);
       return response.data;
     } catch (error: any) {
       console.error('❌ Görev güncelleme hatası:', error);
@@ -202,6 +211,17 @@ class TaskService {
       return response.data;
     } catch (error: any) {
       console.error('❌ Kullanıcı istatistikleri alınamadı:', error);
+      throw error;
+    }
+  }
+
+  // ✅ Kullanıcı zaman istatistikleri
+  async getUserTimeStatistics(userId: number) {
+    try {
+      const response = await api.get(`/tasks/time-statistics/${userId}/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Kullanıcı zaman istatistikleri alınamadı:', error);
       throw error;
     }
   }

@@ -16,6 +16,7 @@ import {
   TouchableOpacity, 
   View 
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 const PRIMARY = '#2F3C7E';
 const ACCENT = '#BFC3DB';
@@ -31,12 +32,6 @@ export default function Settings() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
-  
-  // Password change
-  const [showPasswordFields, setShowPasswordFields] = useState(false);
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   
   // Settings
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -86,8 +81,8 @@ export default function Settings() {
     }
 
     // Validation
-    if (!username.trim() || !email.trim() || !fullName.trim()) {
-      Alert.alert('Hata', 'Kullanıcı adı, email ve ad soyad zorunludur.');
+    if (!username.trim() || !email.trim()) { // fullName kontrolü kaldırıldı
+      Alert.alert('Hata', 'Kullanıcı adı ve email zorunludur.');
       return;
     }
 
@@ -107,7 +102,7 @@ export default function Settings() {
       const response = await authService.updateProfile(userId, {
         username: username.trim(),
         email: email.trim().toLowerCase(),
-        full_name: fullName.trim(),
+        // full_name: fullName.trim(), // fullName gönderilmesin
       });
 
       console.log('✅ Profil güncellendi:', response);
@@ -120,53 +115,6 @@ export default function Settings() {
     } catch (error: any) {
       console.error('❌ Profil güncelleme hatası:', error);
       Alert.alert('Hata', error.message || 'Profil güncellenemedi.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePasswordChange = async () => {
-    // Validation
-    if (!oldPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Hata', 'Tüm şifre alanlarını doldurun.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Hata', 'Yeni şifreler eşleşmiyor.');
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      Alert.alert('Hata', 'Yeni şifre en az 8 karakter olmalıdır.');
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      console.log('🔐 Şifre değiştiriliyor...');
-
-      // ✅ Change password API call
-      await authService.changePassword({
-        old_password: oldPassword,
-        new_password: newPassword,
-        new_password_confirm: confirmPassword,
-      });
-
-      console.log('✅ Şifre değiştirildi');
-
-      Alert.alert('Başarılı', 'Şifreniz değiştirildi.');
-      
-      // Clear password fields
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setShowPasswordFields(false);
-
-    } catch (error: any) {
-      console.error('❌ Şifre değiştirme hatası:', error);
-      Alert.alert('Hata', error.message || 'Şifre değiştirilemedi.');
     } finally {
       setSaving(false);
     }
@@ -217,6 +165,35 @@ export default function Settings() {
     );
   };
 
+  // Profil fotoğrafı seçme fonksiyonu
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('İzin Gerekli', 'Galeriye erişim izni vermelisiniz.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const selectedAsset = result.assets[0];
+      if (userId) {
+        try {
+          const updatedUser = await authService.uploadProfilePicture(userId, selectedAsset.uri);
+          setProfilePicture(updatedUser.profile_picture);
+          Alert.alert('Başarılı', 'Profil fotoğrafı güncellendi.');
+        } catch (e) {
+          Alert.alert('Hata', 'Profil fotoğrafı yüklenemedi.');
+        }
+      }
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -231,7 +208,6 @@ export default function Settings() {
   return (
     <SafeAreaView style={styles.safe}>
       <TopQuarterCircle style={styles.topLeftCircle} />
-      
       <View style={styles.container}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -241,22 +217,11 @@ export default function Settings() {
           <Text style={styles.title}>Ayarlar</Text>
 
           {/* Avatar */}
-          <View style={styles.avatarWrap}>
-            <Image source={avatar} style={styles.avatar} />
-          </View>
-
-          {/* Ad Soyad */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Ad Soyad</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ad Soyad"
-              placeholderTextColor="#C0C0C0"
-              value={fullName}
-              onChangeText={setFullName}
-              editable={!saving}
-            />
-          </View>
+          <TouchableOpacity onPress={pickImage} activeOpacity={0.7}>
+            <View style={styles.avatarWrap}>
+              <Image source={avatar} style={styles.avatar} />
+            </View>
+          </TouchableOpacity>
 
           {/* Kullanıcı Adı */}
           <View style={styles.fieldGroup}>
@@ -286,73 +251,6 @@ export default function Settings() {
               editable={!saving}
             />
           </View>
-
-          {/* Şifre Değiştir Toggle */}
-          <TouchableOpacity
-            style={styles.passwordToggle}
-            onPress={() => setShowPasswordFields(!showPasswordFields)}
-            disabled={saving}
-          >
-            <Text style={styles.labelLink}>
-              {showPasswordFields ? '▼ Şifre Değiştir' : '▶ Şifre Değiştir'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Password Fields */}
-          {showPasswordFields && (
-            <>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Eski Şifre</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Eski Şifre"
-                  placeholderTextColor="#C0C0C0"
-                  value={oldPassword}
-                  onChangeText={setOldPassword}
-                  secureTextEntry
-                  editable={!saving}
-                />
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Yeni Şifre</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Yeni Şifre (min 8 karakter)"
-                  placeholderTextColor="#C0C0C0"
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  secureTextEntry
-                  editable={!saving}
-                />
-              </View>
-
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Yeni Şifre Tekrar</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Yeni Şifre Tekrar"
-                  placeholderTextColor="#C0C0C0"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
-                  editable={!saving}
-                />
-              </View>
-
-              <TouchableOpacity 
-                style={[styles.passwordButton, saving && styles.buttonDisabled]} 
-                onPress={handlePasswordChange}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.passwordButtonText}>Şifreyi Değiştir</Text>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
 
           {/* Bildirimler */}
           <View style={styles.switchGroup}>

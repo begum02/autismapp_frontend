@@ -1,15 +1,26 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import LottiePicker from '../../components/LottiePicker';
 import taskService from '../../services/taskService';
+import { scheduleTaskNotification } from '../../utils/notifications';
+import { useLocalSearchParams } from 'expo-router'; // veya useRoute
+
+type InitialValues = {
+  title?: string;
+  details?: string;
+  date?: Date;
+  timeStart?: { hours: number; minutes: number } | null;
+  timeEnd?: { hours: number; minutes: number } | null;
+  lottieAnimation?: string | null;
+};
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  supportRequiredUserId: number; // ✅ Prop olarak al
+  supportRequiredUserId: number;
   onSubmit: (data: {
     title: string;
     details: string;
@@ -18,32 +29,36 @@ type Props = {
     timeEnd?: { hours: number; minutes: number } | null;
     lottieAnimation?: string | null;
   }) => void;
+  initialValues?: InitialValues; // <-- EKLE
 };
 
 export default function TaskFormForSupportRequired({ 
   visible, 
   onClose, 
-  supportRequiredUserId, // ✅ Destructure
-  onSubmit 
+  supportRequiredUserId,
+  onSubmit,
+  initialValues // <-- EKLE
 }: Props) {
-  const [title, setTitle] = useState('');
-  const [details, setDetails] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [selectedAnimation, setSelectedAnimation] = useState<string | null>(null);
-  
+  const [title, setTitle] = useState(initialValues?.title ?? '');
+  const [details, setDetails] = useState(initialValues?.details ?? '');
+  const [date, setDate] = useState(initialValues?.date ?? new Date());
+  const [selectedAnimation, setSelectedAnimation] = useState(initialValues?.lottieAnimation ?? null);
+  const [timeStart, setTimeStart] = useState(initialValues?.timeStart ?? null);
+  const [timeEnd, setTimeEnd] = useState(initialValues?.timeEnd ?? null);
+
   // Android DateTimePicker states
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
-  const [timeStart, setTimeStart] = useState<{ hours: number; minutes: number } | null>(null);
-  const [timeEnd, setTimeEnd] = useState<{ hours: number; minutes: number } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // <-- EKLENDİ
 
   const canSubmit = useMemo(() => title.trim().length > 0, [title]);
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
-    
+    if (!canSubmit || isSubmitting) return; // <-- Çift submit engellendi
+    setIsSubmitting(true); // <-- Submit başında aktif
+
     try {
       // ✅ Ebeveynin ID'sini al
       const userStr = await AsyncStorage.getItem('user');
@@ -83,6 +98,9 @@ export default function TaskFormForSupportRequired({
       
       console.log('✅ Görev oluşturuldu:', response);
       
+      // Yeni görev için bildirim zamanla
+      await scheduleTaskNotification(title, date, timeStart);
+
       Alert.alert('✅ Başarılı', 'Görev oluşturuldu', [
         {
           text: 'Tamam',
@@ -112,16 +130,17 @@ export default function TaskFormForSupportRequired({
       
     } catch (error: any) {
       console.error('❌ Görev oluşturma hatası:', error);
-      console.error('❌ Response data:', error.response?.data); // ✅ Detaylı hata
-      console.error('❌ Status:', error.response?.status);
-      
-      const errorMessage = error.response?.data?.detail 
-        || error.response?.data?.message 
-        || JSON.stringify(error.response?.data)
-        || error.message 
-        || 'Görev oluşturulamadı';
-      
+      const errorMessage =
+        error.response?.data?.error || // <-- backend'den gelen özel hata
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        JSON.stringify(error.response?.data) ||
+        error.message ||
+        'Görev oluşturulamadı';
+
       Alert.alert('Hata', errorMessage);
+    } finally {
+      setIsSubmitting(false); // <-- Submit sonunda tekrar aktif
     }
   };
 
@@ -155,6 +174,40 @@ export default function TaskFormForSupportRequired({
     }
   };
 
+  // EKLEYİN: initialValues veya visible değiştiğinde formu güncelle
+  useEffect(() => {
+    setTitle(initialValues?.title ?? '');
+    setDetails(initialValues?.details ?? '');
+    setDate(initialValues?.date ?? new Date());
+    setSelectedAnimation(initialValues?.lottieAnimation ?? null);
+    setTimeStart(initialValues?.timeStart ?? null);
+    setTimeEnd(initialValues?.timeEnd ?? null);
+  }, [initialValues, visible]);
+
+  const params = useLocalSearchParams();
+  const userId = Number(params.userId);
+
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!params.userId || isNaN(userId)) {
+      // userId yoksa API çağrısı yapma!
+      return;
+    }
+    const fetchStats = async () => {
+      try {
+        const result = await taskService.getUserStatistics(userId);
+        setStats(result);
+      } catch (error) {
+        setStats(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStats();
+  }, [params.userId]);
+
   return (
     <Modal
       visible={visible}
@@ -177,7 +230,7 @@ export default function TaskFormForSupportRequired({
               <ScrollView 
                 keyboardShouldPersistTaps="handled" 
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 20 }}
+                contentContainerStyle={{ paddingBottom: 0 }}
               >
                 {/* Title Input */}
                 <TextInput
@@ -259,10 +312,15 @@ export default function TaskFormForSupportRequired({
                 {/* Submit Button */}
                 <Pressable 
                   onPress={handleSubmit} 
-                  style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
-                  disabled={!canSubmit}
+                  style={[
+                    styles.submitBtn, 
+                    (!canSubmit || isSubmitting) && styles.submitBtnDisabled
+                  ]}
+                  disabled={!canSubmit || isSubmitting} // <-- Buton disable
                 >
-                  <Text style={styles.submitText}>Kaydet</Text>
+                  <Text style={styles.submitText}>
+                    {isSubmitting ? "Kaydediliyor..." : "Kaydet"}
+                  </Text>
                 </Pressable>
               </ScrollView>
 
@@ -306,18 +364,23 @@ export default function TaskFormForSupportRequired({
 
 const styles = StyleSheet.create({
   overlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0)',
     justifyContent: 'flex-end',
+    position: 'relative',
+
     flex: 1,
   },
   sheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
+    //borderTopLeftRadius: 20,
+    //borderTopRightRadius: 20,
+    
+    maxHeight: '100%',
     ...Platform.select({
       android: {
         elevation: 5,
+        marginBottom:  -50,
+        
       },
       ios: {
         shadowColor: '#000',
@@ -329,41 +392,51 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#fff',
-    padding: 20,
-    paddingBottom: 10,
+    padding: 28,
+    paddingBottom: 18,
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginTop: 12,
+    shadowColor: '#ffffffff',
+  
+    shadowOpacity: 0.10,
+    shadowRadius: 14,
+
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 28,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '900',
     color: '#2F3C7E',
+    letterSpacing: 0.5,
   },
   input: {
     backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 12,
-    fontSize: 16,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 18,
+    fontSize: 17,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    minHeight: 48,
   },
   textArea: {
-    height: 100,
+    height: 110,
     textAlignVertical: 'top',
   },
   datePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#2F3C7E',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 12,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 18,
     backgroundColor: '#F9F9F9',
   },
   dateText: {
@@ -376,23 +449,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 16,
+    marginTop: 22,
   },
   timeBoxContainer: {
     flex: 1,
     alignItems: 'center',
-    marginHorizontal: 6,
+    marginHorizontal: 8,
   },
   timeLabel: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
-    marginBottom: 8,
-    fontWeight: '500',
+    marginBottom: 10,
+    fontWeight: '600',
   },
   timeBox: {
     width: '100%',
-    height: 50,
-    borderRadius: 10,
+    height: 54,
+    borderRadius: 14,
     backgroundColor: '#F5F5F5',
     alignItems: 'center',
     justifyContent: 'center',
@@ -400,26 +473,31 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   timeValue: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#333',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   submitBtn: {
     backgroundColor: '#2F3C7E',
-    borderRadius: 10,
-    height: 50,
-    marginTop: 24,
+    borderRadius: 14,
+    height: 54,
+    marginTop: 32,
     marginBottom: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#2F3C7E',
+ 
+    shadowRadius: 8,
+    elevation: 2,
   },
   submitBtnDisabled: {
-    backgroundColor: '#CCC',
-    opacity: 0.6,
+    backgroundColor: '#2F3C7E',
+    opacity:1,
   },
   submitText: {
     color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
+    fontWeight: '800',
+    fontSize: 18,
+    letterSpacing: 0.5,
   },
 });

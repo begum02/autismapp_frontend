@@ -3,7 +3,7 @@ import Card from '@/components/Card';
 import CustomWeekCalendar from '@/components/CustomWeekCalendar';
 import EditModal from '@/components/EditModal';
 import PlusButton from '@/components/PlusButton';
-import TaskFormForSupportRequired from '@/app/parent/TaskFormForSupportRequired';
+import TaskFormForSupportRequired2 from '@/app/parent/TaskFormForSupportRequired2';
 import TopQuarterCircle from '@/components/TopQuarterCircle';
 import authService from '@/services/authService';
 import taskService from '@/services/taskService';
@@ -12,8 +12,9 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar } from 'react-native-paper';
+import * as Notifications from 'expo-notifications';
 
 const { height } = Dimensions.get('window');
 
@@ -41,13 +42,15 @@ export default function ResponsiblePersonFollowUp() {
   const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [headerDate, setHeaderDate] = useState(() => dayjs(selectedDate));
   const [taskFormVisible, setTaskFormVisible] = useState(false);
-  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editFormVisible, setEditFormVisible] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [responsiblePerson, setResponsiblePerson] = useState<any>(null);
   const [supportRequiredIndividual, setSupportRequiredIndividual] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [editTaskInitialValues, setEditTaskInitialValues] = useState<any>(null);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -103,7 +106,7 @@ export default function ResponsiblePersonFollowUp() {
 
       console.log('📅 Görevler yükleniyor, tarih:', selectedDate);
       
-      const filters: any = { date: selectedDate };
+      const filters: any = { scheduled_date: selectedDate };
       
       if (supportRequiredUserId) {
         filters.assigned_to = supportRequiredUserId;
@@ -128,7 +131,12 @@ export default function ResponsiblePersonFollowUp() {
       Alert.alert('Hata', 'Kullanıcı seçilmedi');
       return;
     }
-    console.log('🔍 Task Form açılıyor, supportRequiredUserId:', supportRequiredUserId); // ✅ Debug
+    // Yeni görev için initialValues ayarla
+    setEditTaskInitialValues({
+      date: dayjs(selectedDate).toDate()
+    });
+    setEditingTaskId(null);
+    setSelectedTask(null);
     setTaskFormVisible(true);
   };
 
@@ -143,8 +151,6 @@ export default function ResponsiblePersonFollowUp() {
     lottieAnimation?: string | null;
   }) => {
     try {
-      console.log('💾 Task kaydediliyor...', data);
-
       if (!supportRequiredUserId) {
         Alert.alert('Hata', 'Kullanıcı ID bulunamadı');
         return;
@@ -155,37 +161,65 @@ export default function ResponsiblePersonFollowUp() {
         return `${time.hours.toString().padStart(2, '0')}:${time.minutes.toString().padStart(2, '0')}:00`;
       };
 
-      // ✅ Ebeveynin ID'sini al
       const userStr = await AsyncStorage.getItem('user');
       if (!userStr) {
         Alert.alert('Hata', 'Kullanıcı bilgisi bulunamadı');
         return;
       }
-      
       const user = JSON.parse(userStr);
       const parentId = user.id;
 
-      await taskService.createTask({
-        title: data.title,
-        description: data.details,
-        scheduled_date: dayjs(data.date).format('YYYY-MM-DD'),
-        start_time: formatTime(data.timeStart) || undefined,
-        end_time: formatTime(data.timeEnd) || undefined,
-        assigned_to: supportRequiredUserId,
-        created_by: parentId, // ✅ Zorunlu
-        lottie_animation: data.lottieAnimation || undefined,
-      });
+      if (editingTaskId) {
+        // Sadece değişen alanları gönder
+        const payload: any = {};
+        if (data.title !== selectedTask?.title) payload.title = data.title;
+        if (data.details !== (selectedTask?.description || '')) payload.description = data.details;
+        if (dayjs(data.date).format('YYYY-MM-DD') !== selectedTask?.scheduled_date)
+          payload.scheduled_date = dayjs(data.date).format('YYYY-MM-DD');
+        if (
+          data.timeStart &&
+          `${String(data.timeStart.hours).padStart(2, '0')}:${String(data.timeStart.minutes).padStart(2, '0')}:00` !== selectedTask?.start_time
+        )
+          payload.start_time = formatTime(data.timeStart);
+        if (
+          data.timeEnd &&
+          `${String(data.timeEnd.hours).padStart(2, '0')}:${String(data.timeEnd.minutes).padStart(2, '0')}:00` !== selectedTask?.end_time
+        )
+          payload.end_time = formatTime(data.timeEnd);
+        if (data.lottieAnimation !== selectedTask?.lottie_animation)
+          payload.lottie_animation = data.lottieAnimation;
 
-      console.log('✅ Task başarıyla oluşturuldu');
+        if (Object.keys(payload).length === 0) {
+          Alert.alert('Uyarı', 'Herhangi bir değişiklik yapılmadı.');
+          return;
+        }
 
-      closeTaskForm();
-      await loadTasks();
-
-      Alert.alert('Başarılı', 'Görev başarıyla oluşturuldu');
-
+        await taskService.updateTask(editingTaskId, payload, 'patch');
+        setEditingTaskId(null);
+        setSelectedTask(null);
+        setEditTaskInitialValues(null);
+        setTaskFormVisible(false);
+        await loadTasks();
+        Alert.alert('Başarılı', 'Görev başarıyla güncellendi');
+      } else {
+        // Yeni görev oluştur
+        await taskService.createTask({
+          title: data.title,
+          description: data.details,
+          scheduled_date: dayjs(data.date).format('YYYY-MM-DD'),
+          start_time: formatTime(data.timeStart) || undefined,
+          end_time: formatTime(data.timeEnd) || undefined,
+          assigned_to: supportRequiredUserId,
+          created_by: parentId,
+          lottie_animation: data.lottieAnimation || undefined,
+        });
+        setTaskFormVisible(false);
+        await loadTasks();
+        Alert.alert('Başarılı', 'Görev başarıyla oluşturuldu');
+      }
     } catch (error: any) {
-      console.error('❌ Task oluşturma hatası:', error);
-      Alert.alert('Hata', error.message || 'Görev oluşturulamadı');
+      console.error('❌ Task oluşturma/güncelleme hatası:', error);
+      Alert.alert('Hata', error.message || 'Görev oluşturulamadı/güncellenemedi');
     }
   };
 
@@ -249,8 +283,12 @@ export default function ResponsiblePersonFollowUp() {
     setHeaderDate(monthDate);
   }, []);
 
+
   const openProfile = () => {
-    router.push('/Profile');
+    console.log('Avatar tıklandı', responsiblePerson);
+    if (responsiblePerson?.id) {
+      router.push('/ResponsibleProfile');
+    }
   };
 
   const handleRefresh = () => {
@@ -260,18 +298,39 @@ export default function ResponsiblePersonFollowUp() {
 
   const openEditModal = (task: Task) => {
     setSelectedTask(task);
-    setEditModalVisible(true);
+    setEditFormVisible(true);
   };
 
   const closeEditModal = () => {
-    setEditModalVisible(false);
+    setEditFormVisible(false);
     setSelectedTask(null);
   };
 
   const handleEdit = () => {
     if (!selectedTask) return;
-    console.log('Edit task:', selectedTask.id);
-    Alert.alert('Bilgi', 'Düzenleme özelliği yakında eklenecek');
+    setEditFormVisible(false);
+
+    // TaskFormForSupportRequired2 için initial values hazırla
+    setEditTaskInitialValues({
+      title: selectedTask.title,
+      details: selectedTask.description || '',
+      date: dayjs(selectedTask.scheduled_date).toDate(),
+      timeStart: selectedTask.start_time
+        ? {
+            hours: parseInt(selectedTask.start_time.split(':')[0]),
+            minutes: parseInt(selectedTask.start_time.split(':')[1]),
+          }
+        : null,
+      timeEnd: selectedTask.end_time
+        ? {
+            hours: parseInt(selectedTask.end_time.split(':')[0]),
+            minutes: parseInt(selectedTask.end_time.split(':')[1]),
+          }
+        : null,
+      lottieAnimation: selectedTask.lottie_animation || null,
+    });
+    setEditingTaskId(selectedTask.id);
+    setTaskFormVisible(true);
   };
 
   const getInitials = (name: string) => {
@@ -283,46 +342,59 @@ export default function ResponsiblePersonFollowUp() {
     return name[0].toUpperCase();
   };
 
+  function toTRDateString(date: Date) {
+    // Europe/Istanbul saat diliminde YYYY-MM-DD formatı
+    const tzDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }));
+    return tzDate.toISOString().split('T')[0];
+  }
+
   return (
     <View style={styles.container}>
       <TopQuarterCircle style={styles.TopQuarterCircle} />
 
-      <View style={styles.headerWrap}>
-        {/* Overlapping Avatars (Sağ Üst) */}
-        <View style={styles.avatarsContainer}>
-          {/* Destek Gereksinimli Birey (Arka) */}
+      {/* Sadece bir avatar bloğu */}
+      <View style={styles.avatarsContainer}>
+        {/* Destek Gereksinimli Birey (Büyük, altta) */}
+        <TouchableOpacity
+          onPress={() => {
+            if (supportRequiredIndividual?.id) {
+              router.push(`/parent/SupportRequiredStatistics?userId=${supportRequiredIndividual.id}`);
+            }
+          }}
+          activeOpacity={0.7}
+          style={styles.avatarBackWrap}
+        >
           {supportRequiredIndividual?.profile_picture ? (
-            <Avatar.Image 
-              size={50} 
+            <Avatar.Image
+              size={56}
               source={{ uri: supportRequiredIndividual.profile_picture }}
               style={styles.avatarBack}
             />
           ) : (
-            <Avatar.Text 
-              size={50} 
-              label={getInitials(supportRequiredIndividual?.full_name || '?')}
-              style={[styles.avatarPlaceholder, styles.avatarBack]}
-              labelStyle={styles.avatarInitials}
-            />
+            <View style={styles.avatarBack}>
+              <Text style={styles.avatarInitials}>{getInitials(supportRequiredIndividual?.full_name || '?')}</Text>
+            </View>
           )}
-          
-          {/* Sorumlu Kişi (Ön - Sağ Üst) */}
+        </TouchableOpacity>
+
+        {/* Sorumlu Kişi (Küçük, sağ üstte) */}
+        <TouchableOpacity onPress={openProfile} activeOpacity={0.7} style={styles.avatarFrontWrap}>
           {responsiblePerson?.profile_picture ? (
-            <Avatar.Image 
-              size={50} 
+            <Avatar.Image
+              size={36}
               source={{ uri: responsiblePerson.profile_picture }}
               style={styles.avatarFront}
             />
           ) : (
-            <Avatar.Text 
-              size={50} 
-              label={getInitials(responsiblePerson?.full_name || '?')}
-              style={[styles.avatarPlaceholder, styles.avatarFront]}
-              labelStyle={styles.avatarInitials}
-            />
+            <View style={styles.avatarFront}>
+              <Text style={styles.avatarInitials}>{getInitials(responsiblePerson?.full_name || '?')}</Text>
+            </View>
           )}
-        </View>
+        </TouchableOpacity>
+      </View>
 
+      {/* headerWrap artık avatar içermiyor */}
+      <View style={styles.headerWrap}>
         {/* Month & Year */}
         <Text style={styles.title}>
           <Text style={styles.monthText}>{headerDate.format('MMMM').toUpperCase()} </Text>
@@ -358,8 +430,6 @@ export default function ResponsiblePersonFollowUp() {
                 title={item.title}
                 status={item.status}
                 onPress={() => openEditModal(item)}
-                onComplete={() => handleTaskComplete(item.id)}
-                onStart={() => handleTaskStart(item.id)}
                 onDelete={() => handleTaskDelete(item.id)}
               />
             )}
@@ -375,22 +445,26 @@ export default function ResponsiblePersonFollowUp() {
       </View>
 
       {/* Task Form Modal */}
-      <TaskFormForSupportRequired
+      <TaskFormForSupportRequired2
         visible={taskFormVisible}
-        onClose={closeTaskForm}
-        supportRequiredUserId={supportRequiredUserId!} // ✅ Prop ekle
+        onClose={() => {
+          setTaskFormVisible(false);
+          setEditTaskInitialValues(null);
+          setEditingTaskId(null);
+          setSelectedTask(null);
+        }}
+        supportRequiredUserId={supportRequiredUserId!}
         onSubmit={handleTaskSubmit}
+        initialValues={editTaskInitialValues}
       />
 
       {/* Edit Modal */}
       <EditModal
-        visible={editModalVisible}
+        visible={editFormVisible}
         onClose={closeEditModal}
         task={selectedTask}
         onEdit={handleEdit}
         onDelete={() => selectedTask && handleTaskDelete(selectedTask.id)}
-        onComplete={() => selectedTask && handleTaskComplete(selectedTask.id)}
-        onStart={() => selectedTask && handleTaskStart(selectedTask.id)}
       />
 
       <BottomQuarterCircle style={styles.BottomQuarterCircle} />
@@ -407,25 +481,70 @@ const styles = StyleSheet.create({
     zIndex: 10
   },
   avatarsContainer: {
-    position: 'absolute',
-    right: -60,
-    top: 5,
-    zIndex: 20,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+   // position: 'absolute',
+    //right: -60,
+    //top: 5,
+    //zIndex: 20,
+   // flexDirection: 'row',
+   // alignItems: 'flex-end',
+
+      position: 'absolute',
+  right: 20,
+  top: 35,
+  zIndex: 999,
+  elevation: 999, // ANDROID
+  },
+  avatarBackWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarBack: {
     borderWidth: 3,
-    borderColor: '#fff',
+    borderColor: '#BFC3DB',
+    position: 'relative',
+    bottom: -30,
+    right:10,
+    
     zIndex: 1,
-    marginBottom: -22,
+    marginTop:20,
+    marginRight:10, // ✅ Overlap için
+    backgroundColor: '#BFC3DB',
+    borderRadius: 23,
+    width: 46,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarFrontWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+
   },
   avatarFront: {
-    borderWidth: 3,
-    borderColor: '#fff',
-    marginLeft: -20, // ✅ Overlap için
-    marginTop: -25,  // ✅ Sol alt köşe pozisyonu
-    zIndex: 2,
+  //  borderWidth: 3,
+  //  borderColor: '#fff',
+   // marginLeft: -20, // ✅ Overlap için
+   // marginTop: -25,  // ✅ Sol alt köşe pozisyonu
+   // zIndex: 1000,
+   // elevation:1000, // ANDROID
+   
+
+ borderWidth:3,
+  borderColor: '#fff',
+  marginLeft: 20, //- Overlap için;
+  marginTop:-40,  // Sol alt köşe pozisyonu  
+  zIndex: 1000,
+  elevation: 1000, // ANDROID
+  borderRadius: 28,
+  width: 56,
+  height: 56,
+  overflow: 'hidden',
+  backgroundColor: '#BFC3DB',
+  cursor: 'pointer',
+  
+    
   },
   avatarPlaceholder: {
     backgroundColor: '#BFC3DB',
@@ -434,6 +553,9 @@ const styles = StyleSheet.create({
     color: '#2F3C7E',
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
+    textAlignVertical: 'center', // Android için,
+     
   },
   headerWrap: { 
     paddingTop: 12, 
@@ -478,11 +600,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: -40,
     top: 0,
+    pointerEvents: 'none',
   },
   BottomQuarterCircle: {
     position: 'absolute',
     right: -40,
     bottom: 0,
+    pointerEvents: 'box-none',
   },
   PlusButton: {
     zIndex: 10,

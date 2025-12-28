@@ -177,9 +177,8 @@ class AuthService {
   async updateProfile(userId: number, data: { username?: string; email?: string; full_name?: string }): Promise<User> {
     try {
       console.log(`📝 Profile güncelleniyor - User ID: ${userId}`);
-      
-      const response = await api.put(`/users/${userId}/`, data);
-      
+      // Doğru endpoint ve PATCH metodu ile gönder
+      const response = await api.patch(`/users/profile/update/`, data);
       console.log('✅ Profile güncellendi:', response.data);
       return response.data;
     } catch (error: any) {
@@ -243,6 +242,32 @@ class AuthService {
       console.error('❌ User bilgisi çekme hatası:', error.response?.data || error.message);
       throw new Error('Kullanıcı bilgisi alınamadı');
     }
+  }
+
+  // KOD DOĞRULAMA
+  async verifyCode(email: string, code: string): Promise<void> {
+    try {
+      await api.post('/users/verify-code/', { email, code });
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Kod doğrulama başarısız');
+    }
+  }
+
+  // Profil fotoğrafı yükle
+  async uploadProfilePicture(userId: number, uri: string): Promise<User> {
+    const formData = new FormData();
+    formData.append('profile_picture', {
+      uri,
+      name: 'profile.jpg',
+      type: 'image/jpeg',
+    } as any);
+
+    const response = await api.patch('/users/profile/update/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    // Kullanıcıyı local'e kaydet
+    await this.saveUser(response.data);
+    return response.data;
   }
 }
 

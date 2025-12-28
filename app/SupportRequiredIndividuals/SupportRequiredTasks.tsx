@@ -7,6 +7,7 @@ import * as Speech from 'expo-speech';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import LottieView from 'lottie-react-native';
 
 const PRIMARY = '#2F3C7E';
 const ACCENT = '#BFC3DB';
@@ -36,8 +37,17 @@ export default function SupportRequiredTasks() {
       setLoading(true);
       console.log('📥 Görevler yükleniyor...');
 
-      const today = new Date().toISOString().split('T')[0];
-      const response = await taskService.getTasks({ date: today });
+      const today = new Date().toLocaleDateString('tr-TR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      })
+        .split('.')
+        .reverse()
+        .join('-'); // "YYYY-MM-DD" formatı
+
+      // Sadece bugünün görevlerini çek
+      const response = await taskService.getTasks({ scheduled_date: today });
 
       console.log('✅ Görevler yüklendi:', response);
       setTasks(response.results || []);
@@ -90,25 +100,53 @@ export default function SupportRequiredTasks() {
   };
 
   const getTaskIcon = (task: Task) => {
-    const title = task.title.toLowerCase();
-    
-    if (title.includes('diş') || title.includes('fırça')) {
-      return { name: 'tooth', color: '#4ECDC4' };
-    } else if (title.includes('kitap') || title.includes('oku')) {
-      return { name: 'book-open-page-variant', color: '#FF6B6B' };
-    } else if (title.includes('ders') || title.includes('çalış')) {
-      return { name: 'school', color: '#95E1D3' };
-    } else if (title.includes('yemek') || title.includes('ye')) {
-      return { name: 'food-apple', color: '#F38181' };
-    } else if (title.includes('uyku') || title.includes('uyu')) {
-      return { name: 'sleep', color: '#A8E6CF' };
-    } else if (title.includes('spor') || title.includes('egzersiz')) {
-      return { name: 'run', color: '#FFD93D' };
-    } else if (title.includes('temiz') || title.includes('banyo')) {
-      return { name: 'shower', color: '#6BCB77' };
+    // Eğer lottie_animation varsa ona göre ikon seç
+    const lottieIconMap: Record<string, { name: string; color: string }> = {
+      "preparing-bag": { name: "bag-personal", color: "#4ECDC4" },
+      "brushing-teeth": { name: "toothbrush", color: "#4ECDC4" },
+      "plug-device": { name: "power-plug", color: "#FFD93D" },
+      "washing-hands": { name: "hand-wash", color: "#6BCB77" },
+      "shower": { name: "shower", color: "#6BCB77" },
+      "toilet": { name: "toilet", color: "#A8E6CF" },
+      "drinking-water": { name: "cup-water", color: "#2F3C7E" },
+      "washing-machine": { name: "washing-machine", color: "#95E1D3" },
+      "relax": { name: "sofa", color: "#BFC3DB" },
+      "set-table": { name: "silverware-fork-knife", color: "#F38181" },
+      "exercise": { name: "run", color: "#FFD93D" },
+      "sleep": { name: "sleep", color: "#A8E6CF" },
+      "cleaning": { name: "broom", color: "#6BCB77" },
+      "trash": { name: "trash-can", color: "#FF6B6B" },
+    };
+
+    if (task.lottie_animation && lottieIconMap[task.lottie_animation]) {
+      const { name, color } = lottieIconMap[task.lottie_animation];
+      return {
+        name,
+        color,
+        icon: <MaterialCommunityIcons name={name as any} size={40} color={color} />,
+      };
     }
-    
-    return { name: 'checkbox-marked-circle-outline', color: PRIMARY };
+
+    // Eski başlığa göre eşleştirme (varsa)
+    const title = task.title.toLowerCase();
+    if (title.includes('diş') || title.includes('fırça')) {
+      return { name: 'tooth', color: '#4ECDC4', icon: <MaterialCommunityIcons name="tooth" size={40} color="#4ECDC4" /> };
+    } else if (title.includes('kitap') || title.includes('oku')) {
+      return { name: 'book-open-page-variant', color: '#FF6B6B', icon: <MaterialCommunityIcons name="book-open-page-variant" size={40} color="#FF6B6B" /> };
+    } else if (title.includes('ders') || title.includes('çalış')) {
+      return { name: 'school', color: '#95E1D3', icon: <MaterialCommunityIcons name="school" size={40} color="#95E1D3" /> };
+    } else if (title.includes('yemek') || title.includes('ye')) {
+      return { name: 'food-apple', color: '#F38181', icon: <MaterialCommunityIcons name="food-apple" size={40} color="#F38181" /> };
+    } else if (title.includes('uyku') || title.includes('uyu')) {
+      return { name: 'sleep', color: '#A8E6CF', icon: <MaterialCommunityIcons name="sleep" size={40} color="#A8E6CF" /> };
+    } else if (title.includes('spor') || title.includes('egzersiz')) {
+      return { name: 'run', color: '#FFD93D', icon: <MaterialCommunityIcons name="run" size={40} color="#FFD93D" /> };
+    } else if (title.includes('temiz') || title.includes('banyo')) {
+      return { name: 'shower', color: '#6BCB77', icon: <MaterialCommunityIcons name="shower" size={40} color="#6BCB77" /> };
+    }
+
+    // Default icon
+    return { name: 'checkbox-marked-circle-outline', color: "#2F3C7E", icon: <MaterialCommunityIcons name="checkbox-marked-circle-outline" size={40} color="#2F3C7E" /> };
   };
 
   const getInitials = (name: string) => {
@@ -131,19 +169,7 @@ export default function SupportRequiredTasks() {
         onPress={() => handleTaskPress(task)}
       >
         <View style={[styles.taskIconContainer, { backgroundColor: iconData.color + '20' }]}>
-          {task.lottie_animation ? (
-            <Image 
-              source={{ uri: task.lottie_animation }} 
-              style={styles.taskIcon}
-              resizeMode="contain"
-            />
-          ) : (
-            <MaterialCommunityIcons 
-              name={iconData.name as any} 
-              size={40} 
-              color={iconData.color} 
-            />
-          )}
+          {iconData.icon}
         </View>
 
         <View style={styles.taskInfo}>
@@ -183,23 +209,25 @@ export default function SupportRequiredTasks() {
         showsVerticalScrollIndicator={false}
       >
         {/* User Profile Header */}
-        <View style={styles.profileHeader}>
-          {currentUser?.profile_picture ? (
-            <Image 
-              source={{ uri: currentUser.profile_picture }} 
-              style={styles.profileImage}
-            />
-          ) : (
-            <View style={styles.profilePlaceholder}>
-              <Text style={styles.profileInitials}>
-                {getInitials(currentUser?.full_name || 'U')}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.userName}>
-            {currentUser?.full_name?.split(' ')[0] || 'Zehra'}
-          </Text>
-        </View>
+        <Pressable onPress={() => router.push('/Settings')}>
+          <View style={styles.profileHeader}>
+            {currentUser?.profile_picture ? (
+              <Image 
+                source={{ uri: currentUser.profile_picture }} 
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.profilePlaceholder}>
+                <Text style={styles.profileInitials}>
+                  {getInitials(currentUser?.full_name || 'U')}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.userName}>
+              {currentUser?.full_name?.split(' ')[0] || 'Zehra'}
+            </Text>
+          </View>
+        </Pressable>
 
         {/* Tasks List */}
         <View style={styles.tasksContainer}>
@@ -239,14 +267,14 @@ const styles = StyleSheet.create({
   },
   topCircle: {
     position: 'absolute',
-    left: -80,
-    top: -80,
+    left: -40,
+    top: 0,
     zIndex: 0,
   },
   bottomCircle: {
     position: 'absolute',
-    right: -80,
-    bottom: -80,
+    right: -40,
+    bottom: 0,
     zIndex: 0,
   },
   scrollContent: {
